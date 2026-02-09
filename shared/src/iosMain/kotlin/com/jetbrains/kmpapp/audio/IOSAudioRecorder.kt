@@ -22,7 +22,7 @@ class IOSAudioRecorder : AudioRecorder {
 
         // PCM format: 16kHz, mono, 16-bit
         val recordingFormat = AVAudioFormat(
-            commonFormat = AVAudioCommonFormatPCMFormatInt16,
+            commonFormat = AVAudioPCMFormatInt16,
             sampleRate = 16000.0,
             channels = 1u,
             interleaved = true
@@ -34,14 +34,16 @@ class IOSAudioRecorder : AudioRecorder {
             format = recordingFormat
         ) { buffer, _ ->
             buffer?.let {
-                val audioBuffer = it.audioBufferList?.pointed?.mBuffers
-                audioBuffer?.let { buf ->
-                    val data = buf.mData?.reinterpret<ByteVar>()
-                    val size = buf.mDataByteSize.toInt()
-                    
-                    if (data != null && size > 0) {
+                val abl = it.audioBufferList?.pointed
+                val audioBuffer0 = abl?.mBuffers?.get(0)
+
+                if (audioBuffer0 != null) {
+                    val dataPtr = audioBuffer0.mData?.reinterpret<ByteVar>()
+                    val size = audioBuffer0.mDataByteSize.toInt()
+
+                    if (dataPtr != null && size > 0) {
                         val byteArray = ByteArray(size) { index ->
-                            data[index]
+                            dataPtr[index]
                         }
                         onPCMData(byteArray)
                     }
