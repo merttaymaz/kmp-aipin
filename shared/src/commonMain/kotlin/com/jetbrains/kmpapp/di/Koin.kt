@@ -5,6 +5,9 @@ import com.jetbrains.kmpapp.data.KtorMuseumApi
 import com.jetbrains.kmpapp.data.MuseumApi
 import com.jetbrains.kmpapp.data.MuseumRepository
 import com.jetbrains.kmpapp.data.MuseumStorage
+import com.jetbrains.kmpapp.speech.createLanguageDetector
+import com.jetbrains.kmpapp.speech.createSpeechRecognizer
+import com.jetbrains.kmpapp.speech.MultiLanguageSpeechRecognizer
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.ContentType
@@ -34,12 +37,19 @@ val dataModule = module {
     }
 }
 
+val speechModule = module {
+    single { createSpeechRecognizer() }
+    single { createLanguageDetector() }
+    single { MultiLanguageSpeechRecognizer(get(), get()) }
+}
+
 fun initKoin() = initKoin(emptyList())
 
 fun initKoin(extraModules: List<Module>) {
     startKoin {
         modules(
             dataModule,
+            speechModule,
             *extraModules.toTypedArray(),
         )
     }
