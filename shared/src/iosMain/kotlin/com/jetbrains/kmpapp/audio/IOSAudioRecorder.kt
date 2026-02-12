@@ -17,16 +17,13 @@ class IOSAudioRecorder : AudioRecorder {
     override fun startRecording(onPCMData: (ByteArray) -> Unit) {
         if (isRecordingFlag) return
 
+        val session = AVAudioSession.sharedInstance()
+        session.setCategory(AVAudioSessionCategoryPlayAndRecord, error = null)
+        session.setActive(true, error = null)
+
         val engine = AVAudioEngine()
         val inputNode = engine.inputNode
-
-        // PCM format: 16kHz, mono, 16-bit
-        val recordingFormat = AVAudioFormat(
-            commonFormat = AVAudioPCMFormatInt16,
-            sampleRate = 16000.0,
-            channels = 1u,
-            interleaved = true
-        )
+        val recordingFormat = inputNode.outputFormatForBus(0u)
 
         inputNode.installTapOnBus(
             bus = 0u,
