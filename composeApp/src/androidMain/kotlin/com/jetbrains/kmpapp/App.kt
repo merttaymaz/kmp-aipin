@@ -118,7 +118,7 @@ fun AppWithDrawer() {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("KMP App") },
+                    title = { Text("KMP AiPin") },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, contentDescription = "Menü")

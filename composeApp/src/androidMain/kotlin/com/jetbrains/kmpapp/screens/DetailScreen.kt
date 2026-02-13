@@ -37,7 +37,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
-import com.jetbrains.kmpapp.R
+import com.kmpaipin.R
 import com.jetbrains.kmpapp.data.MuseumObject
 import org.koin.androidx.compose.koinViewModel
 

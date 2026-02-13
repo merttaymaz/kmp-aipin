@@ -6,7 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import com.jetbrains.kmpapp.R
+import com.kmpaipin.R
 
 @Composable
 fun EmptyScreenContent(
