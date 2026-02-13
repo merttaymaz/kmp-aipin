@@ -31,7 +31,7 @@ kotlin {
     sourceSets {
         androidMain.dependencies {
             implementation(libs.ktor.client.okhttp)
-            implementation(libs.sherpa.onnx)
+            implementation(files("libs/sherpa-onnx-1.12.24.aar"))
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

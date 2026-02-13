@@ -53,13 +53,13 @@ class AndroidSpeechRecognizer(
             decodingMethod = "greedy_search"
         )
 
-        onlineRecognizer = OnlineRecognizer(recognizerConfig)
+        onlineRecognizer = OnlineRecognizer(assetManager = null, config = recognizerConfig)
         return true
     }
 
     private fun initializeWhisper(config: RecognizerConfig): Boolean {
         val recognizerConfig = OfflineRecognizerConfig(
-            featConfig = OfflineFeatureConfig(
+            featConfig = FeatureConfig(
                 sampleRate = config.sampleRate,
                 featureDim = 80
             ),
@@ -76,7 +76,7 @@ class AndroidSpeechRecognizer(
             decodingMethod = "greedy_search"
         )
 
-        offlineRecognizer = OfflineRecognizer(recognizerConfig)
+        offlineRecognizer = OfflineRecognizer(assetManager = null, config = recognizerConfig)
         return true
     }
 

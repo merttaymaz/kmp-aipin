@@ -106,7 +106,7 @@ class AndroidLanguageDetector(
                 decodingMethod = "greedy_search"
             )
 
-            recognizer = OnlineRecognizer(config)
+            recognizer = OnlineRecognizer(assetManager = null, config = config)
             stream = recognizer.createStream()
 
             // Process audio
