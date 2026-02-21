@@ -9,7 +9,9 @@ data class PipelineConfig(
     val sourceLanguage: String = "tr",
     val targetLanguage: String = "en",
     val speakTranslation: Boolean = true,
-    val continuousMode: Boolean = false
+    val continuousMode: Boolean = false,
+    /** Base path where model files are stored on the device */
+    val modelBasePath: String = ""
 )
 
 /**

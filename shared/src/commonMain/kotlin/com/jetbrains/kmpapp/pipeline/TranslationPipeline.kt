@@ -122,7 +122,10 @@ class TranslationPipeline(
     private suspend fun executeSequential(config: PipelineConfig) {
         // Phase 1: STT
         _state.value = PipelineState.Listening
-        sttEngine.initialize(getSTTModelId(config.sourceLanguage))
+        sttEngine.initialize(
+            getSTTModelId(config.sourceLanguage),
+            buildSTTConfig(config)
+        )
         val recognizedText = collectRecognition(config)
         sttEngine.release()
 
@@ -195,7 +198,10 @@ class TranslationPipeline(
     }
 
     private suspend fun preloadAllModels(config: PipelineConfig) {
-        sttEngine.initialize(getSTTModelId(config.sourceLanguage))
+        sttEngine.initialize(
+            getSTTModelId(config.sourceLanguage),
+            buildSTTConfig(config)
+        )
         translationEngine.initialize(
             "opus-mt-${config.sourceLanguage}-${config.targetLanguage}"
         )
@@ -222,4 +228,15 @@ class TranslationPipeline(
 
     private fun getTTSModelId(language: String): String =
         "sherpa-tts-piper-$language"
+
+    /**
+     * Build config map for STT engine initialization.
+     * Provides modelBasePath, modelType, and language so the engine
+     * can locate and load the correct Sherpa-ONNX model files.
+     */
+    private fun buildSTTConfig(config: PipelineConfig): Map<String, Any> = mapOf(
+        "modelBasePath" to config.modelBasePath,
+        "modelType" to "whisper",
+        "language" to config.sourceLanguage
+    )
 }
