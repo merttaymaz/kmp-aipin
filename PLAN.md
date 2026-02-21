@@ -29,6 +29,156 @@ Tüm engine'ler ortak `Engine` interface'inden türer. Her engine:
 
 ---
 
+## Cihaz RAM Kısıtları ve Bellek Yönetim Stratejisi
+
+### Hedef Cihazlar
+
+| Platform | RAM | Kullanılabilir (uygulama) | Strateji |
+|----------|-----|--------------------------|----------|
+| **Android** | 4 GB | ~1-1.5 GB | Sequential Loading (Sıralı Yükleme) |
+| **iOS** | 6-8 GB (yeni iPhone'lar) | ~3-4 GB | Concurrent Loading (Eşzamanlı Yükleme) |
+
+### Bellek Bütçesi (Android 4GB)
+
+```
+Toplam RAM:           4096 MB
+├─ Android OS:       ~1500 MB
+├─ Diğer uygulamalar: ~500 MB
+├─ Uygulama overhead:  ~200 MB (UI, Compose, runtime)
+└─ Model bütçesi:    ~800 MB MAX (güvenli limit)
+    Hedef:           ~400 MB (OOM'den kaçınmak için)
+```
+
+### Model Bellek Tüketimi (Karşılaştırma)
+
+| Model | FP32 RAM | INT8 Quantized RAM | Disk |
+|-------|----------|--------------------|------|
+| Whisper tiny (STT) | ~75 MB | ~40 MB | ~40 MB |
+| Whisper base (STT) | ~150 MB | ~80 MB | ~75 MB |
+| Whisper small (STT) | ~500 MB | ~250 MB | ~245 MB |
+| OPUS-MT (Translation) | ~200 MB | ~100 MB | ~50-150 MB |
+| VITS small (TTS) | ~80 MB | ~40 MB | ~30 MB |
+| Piper (TTS) | ~60 MB | ~30 MB | ~20 MB |
+
+### Android Stratejisi: Sequential Model Loading
+
+4GB cihazlarda **aynı anda en fazla 1 model** RAM'de tutulur. Pipeline sıralı çalışır:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              Android Sequential Pipeline                │
+│                                                         │
+│  Phase 1: STT                                           │
+│  ┌─────────┐     ┌──────────┐     ┌─────────┐          │
+│  │ Load STT│────▶│ Recognize│────▶│Unload   │          │
+│  │ Model   │     │ Speech   │     │STT Model│          │
+│  └─────────┘     └──────────┘     └────┬────┘          │
+│                                        │ text           │
+│  Phase 2: Translation                  ▼                │
+│  ┌─────────┐     ┌──────────┐     ┌─────────┐          │
+│  │ Load    │────▶│ Translate│────▶│Unload   │          │
+│  │ Trans.  │     │ Text     │     │Trans.   │          │
+│  └─────────┘     └──────────┘     └────┬────┘          │
+│                                        │ translated     │
+│  Phase 3: TTS                          ▼                │
+│  ┌─────────┐     ┌──────────┐     ┌─────────┐          │
+│  │ Load TTS│────▶│Synthesize│────▶│Unload   │          │
+│  │ Model   │     │ Audio    │     │TTS Model│          │
+│  └─────────┘     └──────────┘     └─────────┘          │
+│                                        │ audio          │
+│                                        ▼ play           │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Avantajlar:**
+- Pik bellek kullanımı: ~40-100 MB (tek model)
+- OOM riski çok düşük
+- Daha büyük/kaliteli modeller kullanılabilir
+
+**Dezavantajlar:**
+- Model yükleme/boşaltma süresi (~1-3 sn her geçişte)
+- Toplam pipeline süresi daha uzun
+
+**Optimizasyon:** Sık kullanılan senaryoda modeller önceden yüklenebilir (preload hint).
+
+### iOS Stratejisi: Concurrent Model Loading
+
+Yeni iPhone'larda (6-8GB RAM) **tüm modeller aynı anda** RAM'de tutulabilir:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│               iOS Concurrent Pipeline                    │
+│                                                         │
+│  App Start: Preload all models                          │
+│  ┌──────────┐  ┌───────────┐  ┌──────────┐             │
+│  │STT Model │  │Translation│  │TTS Model │ (all in RAM) │
+│  │ (~80 MB) │  │ (~100 MB) │  │ (~40 MB) │             │
+│  └────┬─────┘  └─────┬─────┘  └────┬─────┘             │
+│       │              │              │                   │
+│       ▼              ▼              ▼                   │
+│  ┌──────────────────────────────────────────┐           │
+│  │  Audio → STT → Translate → TTS → Play   │           │
+│  │  (instant transitions, no loading delay)  │           │
+│  └──────────────────────────────────────────┘           │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Avantajlar:**
+- Geçişler anlık (model yükleme beklenmez)
+- Daha iyi UX, daha hızlı toplam süre
+- Daha büyük modeller bile sığar
+
+### Engine Interface'ine Bellek Yönetimi Eklentisi
+
+```kotlin
+interface Engine {
+    val engineId: String
+    val supportedModels: List<String>
+
+    suspend fun initialize(modelId: String, config: Map<String, Any> = emptyMap())
+    suspend fun isReady(): Boolean
+    suspend fun release()
+
+    // Bellek yönetimi
+    fun getMemoryUsageBytes(): Long          // Mevcut RAM kullanımı
+    fun getEstimatedMemoryBytes(): Long      // Tahmini RAM gereksinimi
+}
+
+// Pipeline bellek stratejisi
+enum class MemoryStrategy {
+    SEQUENTIAL,   // Android 4GB: Sıralı yükle/boşalt
+    CONCURRENT    // iOS 6-8GB: Hepsini RAM'de tut
+}
+```
+
+### Android İçin Model Önerileri (4GB Optimum)
+
+| Kullanım | Model | Disk | RAM (INT8) | Kalite |
+|----------|-------|------|------------|--------|
+| STT Türkçe | whisper-tiny-tr | 40 MB | ~40 MB | Yeterli |
+| STT İngilizce | whisper-tiny-en | 40 MB | ~40 MB | Yeterli |
+| Translation | opus-mt-tr-en (INT8) | ~50 MB | ~50 MB | İyi |
+| TTS Türkçe | piper-tr-medium | 20 MB | ~30 MB | İyi |
+| TTS İngilizce | piper-en-medium | 20 MB | ~30 MB | İyi |
+| **TOPLAM** | | **~170 MB** | **~50 MB pik** | |
+
+> Pik RAM: Sequential'da tek model = ~50 MB. Tüm modeller disk'te ~170 MB.
+
+### iOS İçin Model Önerileri (6-8GB, kalite odaklı)
+
+| Kullanım | Model | Disk | RAM (FP16) | Kalite |
+|----------|-------|------|------------|--------|
+| STT Türkçe | whisper-base-tr | 75 MB | ~120 MB | Çok iyi |
+| STT İngilizce | whisper-base-en | 75 MB | ~120 MB | Çok iyi |
+| Translation | opus-mt-tr-en (FP16) | ~150 MB | ~200 MB | Çok iyi |
+| TTS Türkçe | vits-tr | 30 MB | ~80 MB | Çok iyi |
+| TTS İngilizce | vits-en | 30 MB | ~80 MB | Çok iyi |
+| **TOPLAM** | | **~360 MB** | **~600 MB eşzamanlı** | |
+
+> Tüm modeller aynı anda RAM'de: ~600 MB. iPhone 15'te bile sorunsuz.
+
+---
+
 ## Modül Yapısı (Yeni + Mevcut)
 
 ```
@@ -534,3 +684,53 @@ Bu mimari aşağıdaki genişlemelere hazırdır:
 - İlk indirme: Minimum set (tiny modeller)
 - Opsiyonel: Daha büyük/kaliteli modeller sonra indirilebilir
 - WiFi zorunluluğu: 100MB+ modeller için uyarı
+
+### 6. Platform-Aware Pipeline Örneği
+
+```kotlin
+class TranslationPipeline(...) {
+    private val memoryStrategy: MemoryStrategy = detectMemoryStrategy()
+
+    private fun detectMemoryStrategy(): MemoryStrategy {
+        val availableRam = getAvailableMemoryMB()
+        return if (availableRam >= 2048) MemoryStrategy.CONCURRENT  // iOS
+               else MemoryStrategy.SEQUENTIAL                        // Android 4GB
+    }
+
+    suspend fun execute(config: PipelineConfig) {
+        when (memoryStrategy) {
+            MemoryStrategy.SEQUENTIAL -> executeSequential(config)
+            MemoryStrategy.CONCURRENT -> executeConcurrent(config)
+        }
+    }
+
+    // Android: Sıralı model yükleme
+    private suspend fun executeSequential(config: PipelineConfig) {
+        // 1. STT: Yükle → Tanı → Boşalt
+        sttEngine.initialize(sttModelId)
+        val text = sttEngine.recognize(audioData)
+        sttEngine.release()  // RAM'den çıkar
+
+        // 2. Translation: Yükle → Çevir → Boşalt
+        translationEngine.initialize(transModelId)
+        val translated = translationEngine.translate(text, src, tgt)
+        translationEngine.release()  // RAM'den çıkar
+
+        // 3. TTS: Yükle → Sentezle → Boşalt
+        ttsEngine.initialize(ttsModelId)
+        val audio = ttsEngine.synthesize(translated.text)
+        ttsEngine.release()  // RAM'den çıkar
+
+        audioPlayer.play(audio)
+    }
+
+    // iOS: Tüm modeller önceden yüklü
+    private suspend fun executeConcurrent(config: PipelineConfig) {
+        // Modeller zaten yüklü, direkt çalıştır
+        val text = sttEngine.recognize(audioData)
+        val translated = translationEngine.translate(text, src, tgt)
+        val audio = ttsEngine.synthesize(translated.text)
+        audioPlayer.play(audio)
+    }
+}
+```
