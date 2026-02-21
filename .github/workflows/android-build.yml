@@ -13,7 +13,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -27,6 +27,11 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -37,10 +42,14 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build shared module (Android target)
-        run: ./gradlew :shared:compileKotlinAndroid --no-daemon
+        run: ./gradlew :shared:compileKotlinAndroid --no-daemon --stacktrace
+        env:
+          GRADLE_OPTS: "-Xmx3g -Dorg.gradle.jvmargs=-Xmx3g"
 
       - name: Build Android app (debug)
-        run: ./gradlew :composeApp:assembleDebug --no-daemon
+        run: ./gradlew :composeApp:assembleDebug --no-daemon --stacktrace
+        env:
+          GRADLE_OPTS: "-Xmx3g -Dorg.gradle.jvmargs=-Xmx3g"
 
       - name: Run shared module tests
         run: ./gradlew :shared:testDebugUnitTest --no-daemon
@@ -48,6 +57,7 @@ jobs:
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
+        if: success()
         with:
           name: debug-apk
           path: composeApp/build/outputs/apk/debug/*.apk
