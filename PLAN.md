@@ -157,25 +157,41 @@ enum class MemoryStrategy {
 |----------|-------|------|------------|--------|
 | STT Türkçe | whisper-tiny-tr | 40 MB | ~40 MB | Yeterli |
 | STT İngilizce | whisper-tiny-en | 40 MB | ~40 MB | Yeterli |
-| Translation | opus-mt-tr-en (INT8) | ~50 MB | ~50 MB | İyi |
+| Translation EN→TR | opus-mt-en-tr (INT8) | ~50 MB | ~50 MB | İyi |
+| Translation TR→EN | opus-mt-tr-en (INT8) | ~50 MB | ~50 MB | İyi |
 | TTS Türkçe | piper-tr-medium | 20 MB | ~30 MB | İyi |
 | TTS İngilizce | piper-en-medium | 20 MB | ~30 MB | İyi |
-| **TOPLAM** | | **~170 MB** | **~50 MB pik** | |
+| **TOPLAM (disk)** | | **~220 MB** | **~50 MB pik** | |
 
-> Pik RAM: Sequential'da tek model = ~50 MB. Tüm modeller disk'te ~170 MB.
+> Pik RAM: Sequential'da tek model = ~50 MB. Tüm modeller disk'te ~220 MB.
+> Not: Aynı anda sadece bir yönde çeviri yapılır, ilgili translation modeli yüklenir.
 
-### iOS İçin Model Önerileri (6-8GB, kalite odaklı)
+### iOS İçin Model Önerileri (6-8GB, kalite odaklı - OPUS-MT)
 
 | Kullanım | Model | Disk | RAM (FP16) | Kalite |
 |----------|-------|------|------------|--------|
 | STT Türkçe | whisper-base-tr | 75 MB | ~120 MB | Çok iyi |
 | STT İngilizce | whisper-base-en | 75 MB | ~120 MB | Çok iyi |
-| Translation | opus-mt-tr-en (FP16) | ~150 MB | ~200 MB | Çok iyi |
+| Translation EN→TR | opus-mt-en-tr (FP16) | ~150 MB | ~200 MB | Çok iyi |
+| Translation TR→EN | opus-mt-tr-en (FP16) | ~150 MB | ~200 MB | Çok iyi |
 | TTS Türkçe | vits-tr | 30 MB | ~80 MB | Çok iyi |
 | TTS İngilizce | vits-en | 30 MB | ~80 MB | Çok iyi |
-| **TOPLAM** | | **~360 MB** | **~600 MB eşzamanlı** | |
+| **TOPLAM (disk)** | | **~510 MB** | **~800 MB eşzamanlı** | |
 
-> Tüm modeller aynı anda RAM'de: ~600 MB. iPhone 15'te bile sorunsuz.
+> Tüm modeller aynı anda RAM'de: ~800 MB. iPhone 15'te (8GB) sorunsuz.
+> Her iki yön translation modeli de preload edilir, yön değişiminde bekleme olmaz.
+
+### Her İki Platform: OPUS-MT (Helsinki-NLP)
+
+**Karar:** Her iki platformda da OPUS-MT kullanılacak. Tek fark model hassasiyeti ve yükleme stratejisi:
+
+| | Android (4GB) | iOS (6-8GB) |
+|--|---------------|-------------|
+| **Translation backend** | OPUS-MT | OPUS-MT |
+| **Quantization** | INT8 | FP16 |
+| **Model yükleme** | Sequential (tek model) | Concurrent (hepsi RAM'de) |
+| **Yön değişimi** | Model swap gerekir (~1-2s) | Anlık (ikisi de yüklü) |
+| **İlk desteklenen çift** | EN↔TR | EN↔TR |
 
 ---
 
@@ -289,10 +305,10 @@ interface ModelRegistry {
 | `sherpa-stt-zipformer-en` | STT | en | ~15 MB | sherpa-onnx |
 | `sherpa-tts-vits-tr` | TTS | tr | ~30 MB | sherpa-onnx |
 | `sherpa-tts-piper-en` | TTS | en | ~20 MB | sherpa-onnx |
-| `onnx-translate-nllb-tr-en` | TRANSLATION | tr→en | ~300 MB | onnx-runtime |
-| `onnx-translate-nllb-en-tr` | TRANSLATION | en→tr | ~300 MB | onnx-runtime |
+| `opus-mt-en-tr` | TRANSLATION | en→tr | ~50-150 MB | onnx-runtime |
+| `opus-mt-tr-en` | TRANSLATION | tr→en | ~50-150 MB | onnx-runtime |
 
-> **Not:** Translation modeli en büyük parça. NLLB-200 (distilled-600M) veya OPUS-MT modelleri kullanılabilir. İlk sürümde CTranslate2/ONNX Runtime ile Helsinki-NLP OPUS-MT modelleri tercih edilebilir (~50-150MB per pair).
+> **Not:** Her iki platformda da OPUS-MT (Helsinki-NLP) kullanılır. Android'de INT8 quantized (~50 MB/çift), iOS'ta FP16 (~150 MB/çift). İlk desteklenen çift: EN↔TR.
 
 ---
 
@@ -376,14 +392,13 @@ data class TranslationResult(
    - Sadece İngilizce'ye çeviri yapabilir, tersine çalışmaz
 
 **Önerilen ilk implementasyon:**
-- Whisper'ın translate modunu kullanarak X→EN çevirisini hemen destekle
-- OPUS-MT ile EN→X çevirisini ekle
-- Böylece çift yönlü çalışır: TR→EN (Whisper), EN→TR (OPUS-MT)
+- OPUS-MT ile çift yönlü: EN→TR (opus-mt-en-tr) + TR→EN (opus-mt-tr-en)
+- Her iki platformda aynı backend (OPUS-MT), farklı quantization (Android: INT8, iOS: FP16)
+- Yeni dil çifti eklemek = yeni OPUS-MT modeli indirmek
 
 **Platform implementasyonları:**
-- `androidMain/translation/OnnxTranslationEngine.kt` → ONNX Runtime Android
-- `iosMain/translation/OnnxTranslationEngine.kt` → ONNX Runtime iOS
-- `commonMain/translation/WhisperTranslationEngine.kt` → Whisper translate modu (STTEngine üzerine wrapper)
+- `androidMain/translation/OnnxTranslationEngine.kt` → ONNX Runtime Android (INT8)
+- `iosMain/translation/OnnxTranslationEngine.kt` → ONNX Runtime iOS (FP16)
 
 ---
 
@@ -624,11 +639,10 @@ Aşama 3: TTS Implementation
   ├─ 3.3 Android SherpaOnnxTTSEngine
   └─ 3.4 iOS SherpaOnnxTTSEngine (placeholder + yapı)
 
-Aşama 4: Translation Implementation
+Aşama 4: Translation Implementation (OPUS-MT)
   ├─ 4.1 TranslationEngine interface + config/result types
-  ├─ 4.2 WhisperTranslationEngine (X→EN, STT wrapper)
-  ├─ 4.3 OnnxTranslationEngine (OPUS-MT, her iki yön)
-  └─ 4.4 Platform-specific ONNX Runtime entegrasyonu
+  ├─ 4.2 OnnxTranslationEngine (OPUS-MT EN→TR + TR→EN)
+  └─ 4.3 Platform-specific ONNX Runtime entegrasyonu (Android INT8, iOS FP16)
 
 Aşama 5: Pipeline Orchestration
   ├─ 5.1 TranslationPipeline (akış yönetimi)
@@ -660,10 +674,11 @@ Bu mimari aşağıdaki genişlemelere hazırdır:
 ## Teknik Kararlar / Tartışma Noktaları
 
 ### 1. Translation Backend Seçimi
-- **Seçenek A:** OPUS-MT (Helsinki-NLP) → Küçük (50-150MB/pair), hızlı, dil çifti bazlı
-- **Seçenek B:** NLLB-200 distilled → Büyük (~300MB), tek model 200+ dil
-- **Seçenek C:** Whisper translate → Sadece X→EN yönü, ek model yok
-- **Öneri:** Başlangıçta A + C hibrit yaklaşım
+- **Karar:** OPUS-MT (Helsinki-NLP) → Her iki platformda
+  - Android: INT8 quantized (~50 MB/çift), sequential loading
+  - iOS: FP16 (~150 MB/çift), concurrent loading
+  - İlk çift: EN→TR ve TR→EN
+  - Gelecekte yeni dil çiftleri ek OPUS-MT modelleri ile eklenir
 
 ### 2. ONNX Runtime Entegrasyonu
 - Android: `onnxruntime-android` Maven dependency
