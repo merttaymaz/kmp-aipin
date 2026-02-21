@@ -695,10 +695,49 @@ Bu mimari aşağıdaki genişlemelere hazırdır:
 - `SpeechRecognizer` → `STTEngine` adapter pattern ile geçiş
 - Mevcut ekranlar (AudioRecordScreen vb.) çalışmaya devam eder
 
-### 5. Model Boyutu Stratejisi
-- İlk indirme: Minimum set (tiny modeller)
-- Opsiyonel: Daha büyük/kaliteli modeller sonra indirilebilir
-- WiFi zorunluluğu: 100MB+ modeller için uyarı
+### 5. Model Boyutu Stratejisi ve WiFi Model İndirme
+
+**İlk kurulum:** Minimum set (tiny/small modeller, EN↔TR)
+- Kullanıcı ilk açılışta sadece temel modelleri indirir (~220 MB Android, ~510 MB iOS)
+
+**Sonradan model indirme (WiFi ile):**
+Kullanıcı, uygulama ayarlarından WiFi'ya bağlıyken şunları yapabilir:
+1. **Yeni dil çifti ekleme** → Ek OPUS-MT modeli indirir (ör. DE↔TR, FR↔EN)
+2. **Daha kaliteli modele yükseltme** → whisper-tiny → whisper-base/small
+3. **Farklı TTS sesi indirme** → Alternatif ses modelleri (kadın/erkek, farklı aksan)
+4. **Model silme** → Kullanılmayan dil çiftlerini kaldırarak disk alanı açma
+
+**İndirme kuralları:**
+- 50 MB üzeri modeller: Sadece WiFi ile indirilebilir (mobil veri uyarısı)
+- Background download desteği (uygulama arka planda indirmeye devam eder)
+- İndirme durumu: Progress bar + pause/resume
+- Checksum doğrulama: İndirme sonrası model integrity kontrolü
+
+**SettingsScreen → Model Yönetimi UI:**
+```
+┌──────────────────────────────────┐
+│  Model Yönetimi                  │
+│                                  │
+│  ✅ Yüklü Modeller:              │
+│  ├─ STT Whisper tiny TR (40 MB) │
+│  ├─ STT Whisper tiny EN (40 MB) │
+│  ├─ Translation EN→TR (50 MB)   │
+│  ├─ Translation TR→EN (50 MB)   │
+│  ├─ TTS Piper TR (20 MB)       │
+│  └─ TTS Piper EN (20 MB)       │
+│                                  │
+│  📥 İndirilebilir:               │
+│  ├─ 🔒 STT Whisper base TR      │
+│  │   (75 MB - Daha iyi kalite)  │
+│  ├─ 🔒 Translation DE→TR        │
+│  │   (50 MB - Almanca desteği)  │
+│  └─ 🔒 TTS VITS TR              │
+│      (30 MB - Daha doğal ses)   │
+│                                  │
+│  ⚠️ WiFi gerekli (>50 MB)       │
+│  Disk kullanımı: 220 MB / 2 GB  │
+└──────────────────────────────────┘
+```
 
 ### 6. Platform-Aware Pipeline Örneği
 
