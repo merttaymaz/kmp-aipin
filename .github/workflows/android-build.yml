@@ -45,7 +45,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build shared module (Android target)
-        run: ./gradlew :shared:compileKotlinAndroid --no-daemon --stacktrace
+        run: ./gradlew :shared:compileDebugKotlinAndroid --no-daemon --stacktrace
         env:
           GRADLE_OPTS: "-Xmx3g -Dorg.gradle.jvmargs=-Xmx3g"
 
