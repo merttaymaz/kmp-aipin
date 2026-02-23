@@ -144,7 +144,7 @@ class IOSModelDownloader : ModelDownloader {
 
             // Synchronous download for simplicity
             // In production, use delegate pattern for progress
-            val semaphore = kotlin.native.concurrent.AtomicInt(0)
+            val semaphore = kotlin.concurrent.AtomicInt(0)
             var downloadError: NSError? = null
             var downloadedData: NSData? = null
 
