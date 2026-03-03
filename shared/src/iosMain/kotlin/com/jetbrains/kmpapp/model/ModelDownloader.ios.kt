@@ -153,7 +153,7 @@ class IOSModelDownloader : ModelDownloader {
                     downloadError = error
                 } else {
                     downloadedData = data
-                    totalSize = data?.length ?: modelInfo.size
+                    totalSize = data?.length?.toLong() ?: modelInfo.size
                 }
                 semaphore.value = 1
             }

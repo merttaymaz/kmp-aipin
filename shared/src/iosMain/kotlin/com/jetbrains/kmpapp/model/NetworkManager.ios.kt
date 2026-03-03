@@ -5,6 +5,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import platform.Foundation.NSNotificationCenter
 import platform.SystemConfiguration.*
+import platform.CoreFoundation.CFRunLoopGetCurrent
+import platform.CoreFoundation.kCFRunLoopDefaultMode
+import platform.posix.AF_INET
+import platform.posix.sockaddr_in
 import kotlinx.cinterop.*
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
